@@ -32,6 +32,8 @@ public class StockTracker {
             String quantity = record.get("QUANTITY");
             String price = record.get("PRICE");
             String symbol = record.get("SYMBOL");
+            symbol = symbol.replaceAll("\\.", "").replaceAll(" " , "");
+
             String date  = record.get("DATE");
             date = date.substring(6)+"-" + date.substring(0, 2) +"-" + date.substring(3,5) + "-00:00:00." + count;
 
@@ -91,6 +93,8 @@ public class StockTracker {
         Map<String, Double> mapOfSymbolsToLastBuyPrice = new TreeMap<>();
 
 
+        Map<String, Double> mapOfSymbolsToBuyPrice = new TreeMap<>();
+
         Map<String, Double> mapOfSymbolsToMarketStrike3NoTolerance = new TreeMap<>();
         Map<String, Double> mapOfSymbolsToMarketStrike3NoTolerance2 = new TreeMap<>();
         Map<String, Double> mapOfSymbolsToMarketPrice = new TreeMap<>();
@@ -103,16 +107,21 @@ public class StockTracker {
         Double cumPnL = 0.0d;
         for (Map.Entry<String, List<DataModel>> entry: mapOfSymbolsToCSVs.entrySet() ) {
 
+
             int  cumBuysQty = 0;
             int  cumSellsQty = 0;
             String symbol = entry.getKey();
-            System.out.println(symbol);
-            symbol = symbol.replace(" " , "");
 
-            Stock stock = YahooFinance.get(symbol.replace(".", ""));
+           // symbol = symbol.replaceAll("\\.", "").replaceAll(" " , "");
+
+            System.out.println(symbol);
+
+          //  if ( symbol != "BRKB") continue;
+            Stock stock = YahooFinance.get(symbol);
 
             Double  price = stock.getQuote().getPrice().doubleValue();
             mapOfSymbolsToMarketPrice.put(symbol, price);
+            System.out.println(symbol);
 
             List<DataModel> list = entry.getValue();
 
@@ -158,6 +167,8 @@ public class StockTracker {
                         dCum.price = Math.abs(dCum.amount/dCum.quantity);
                         mapOfSymbolsToLastBuyPrice.put(symbol+dCum.date, dCum.price);
                     }
+
+                    mapOfSymbolsToBuyPrice.put(symbol, dCum.price);
                 }
             }
             logger.info(" " + sequenceofBuysAndSells);
@@ -262,9 +273,6 @@ public class StockTracker {
         for(Map.Entry<String, Double> entry: mapOfSymbolsToPnLs.entrySet())
         {
             dos.write((entry.getKey() +","+entry.getValue()+"\n" ).getBytes());
-
-
-
         }
         dos.write(("GRAND-TOTAL,"+ cumPnL+"\n").getBytes());
         dos.close();baos.close();fos.close();
@@ -280,12 +288,35 @@ public class StockTracker {
         dos.write("Symbol,CurrentPrice,LastBuyPrice,CurrentExposure,PnL,NextStrikePriceMin,NextStrikePriceMax,InRange,LowerThanBuyPrice,StrikePriceMarketPrice,StrikePriceWithNoTolerance,MyPrevPrice\n".getBytes());
         for(Map.Entry<String, Double> entry: mapOfSymbolsToStrikePriceBuy.entrySet())
         {
-            dos.write((entry.getKey() +","+
-                    mapOfSymbolsToMarketPrice.get(entry.getKey()) + "," +
-                    findSymbolPriceWIthLatestDate(entry.getKey(), mapOfSymbolsToStrikePriceBuy) + "," +
+            Double currMktPrice = 0.0d, myPrice=0.0d;
 
-                    symbolsWithPos.contains(entry.getKey()) + "," +
-                    mapOfSymbolsToPnLs.get(entry.getKey()) + "," +
+            myPrice = findSymbolPriceWIthLatestDate(entry.getKey(), mapOfSymbolsToStrikePriceBuy);
+            if (myPrice == null || myPrice <= 0.01)
+            {
+                myPrice = mapOfSymbolsToBuyPrice.get(entry.getKey());
+            }
+
+            String symbol = entry.getKey();
+            currMktPrice=mapOfSymbolsToMarketPrice.get(entry.getKey());
+
+            if (symbolsWithPos == null || (symbolsWithPos.contains(entry.getKey())) )
+            {
+                if (myPrice == null)
+                {
+                    System.out.println("Symbol" + symbol);
+                }
+                if (myPrice == null) myPrice = currMktPrice;
+                double d = (currMktPrice-myPrice);
+            }
+            String lastBuyPrice = (symbolsWithPos.contains(entry.getKey()) ? ((double)(currMktPrice-myPrice)+"") :"FALSE");
+            String pnl = "" +  mapOfSymbolsToPnLs.get(entry.getKey());
+
+            dos.write(( symbol+","+//Symbol
+                    (currMktPrice) + "," + //CurrentPrice
+                    ( myPrice) + "," +//LastBuyPrice
+
+                    lastBuyPrice + "," +
+                    pnl + "," +
                     entry.getValue()+  "," +
                     mapOfSymbolsToStrikePriceSell.get(entry.getKey()) + "," +
                     mapOfSymbolsToInRamge.get(entry.getKey()) + "," +
